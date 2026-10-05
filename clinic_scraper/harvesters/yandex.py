@@ -15,10 +15,20 @@ class YandexHarvester(BaseHarvester):
 
     def __init__(self, settings: AppSettings):
         self.settings = settings
+        self.yandex_cfg = settings.harvesters.yandex
         self.city = settings.city
         self.queries = settings.search_config.search_queries
         self.stop_words = [sw.lower() for sw in settings.search_config.stop_words_gov]
-        self.max_results = settings.max_results_yandex_per_query
+        self.max_results = self.yandex_cfg.max_results_per_query
+        self.scroll_count = self.yandex_cfg.scroll_count
+        self.scroll_delta = self.yandex_cfg.scroll_delta
+        self.scroll_wait_ms = self.yandex_cfg.scroll_wait_ms
+        self.load_timeout_ms = self.yandex_cfg.load_timeout_ms
+        self.initial_wait_ms = self.yandex_cfg.initial_wait_ms
+        self.viewport = {
+            "width": self.yandex_cfg.viewport_width,
+            "height": self.yandex_cfg.viewport_height,
+        }
 
     async def harvest(self) -> List[RawClinic]:
         if not self.settings.use_yandex:
@@ -42,7 +52,7 @@ class YandexHarvester(BaseHarvester):
             )
             context = await browser.new_context(
                 user_agent=REALISTIC_HEADERS["User-Agent"],
-                viewport={"width": 1400, "height": 900}
+                viewport=self.viewport
             )
             page = await context.new_page()
 
@@ -51,13 +61,13 @@ class YandexHarvester(BaseHarvester):
                 url = f"https://yandex.ru/maps/?text={quote(full_search)}"
                 logger.info(f"Яндекс поиск: {full_search}")
                 try:
-                    await page.goto(url, wait_until="domcontentloaded", timeout=35000)
-                    await page.wait_for_timeout(3500)
+                    await page.goto(url, wait_until="domcontentloaded", timeout=self.load_timeout_ms)
+                    await page.wait_for_timeout(self.initial_wait_ms)
 
                     # Скролл списка результатов для дозагрузки карточек
-                    for _ in range(7):
-                        await page.mouse.wheel(0, 2200)
-                        await page.wait_for_timeout(1100)
+                    for _ in range(self.scroll_count):
+                        await page.mouse.wheel(0, self.scroll_delta)
+                        await page.wait_for_timeout(self.scroll_wait_ms)
 
                     cards = await page.query_selector_all(
                         "div[class*='search-snippet-view'], div[class*='business-snippet'], div[class*='snippet']"

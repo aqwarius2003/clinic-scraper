@@ -3,6 +3,7 @@
 import re
 from typing import List, Dict, Tuple, Optional
 
+from clinic_scraper.config import DedupRulesConfig
 from clinic_scraper.core.logger import logger
 from clinic_scraper.core.punycode import (
     normalize_phone,
@@ -14,7 +15,11 @@ from clinic_scraper.core.punycode import (
 from clinic_scraper.models import RawClinic
 
 
-def smart_cascade_dedup(clinics: List[RawClinic]) -> List[RawClinic]:
+def smart_cascade_dedup(
+    clinics: List[RawClinic],
+    dedup_rules: Optional[DedupRulesConfig] = None,
+    city: str = ""
+) -> List[RawClinic]:
     """Умное каскадное объединение дублей (по доменам, телефонам, бренду+улице, имени)."""
     logger.info(f"Node 2: Умное каскадное объединение ({len(clinics)} сырых записей)...")
     unique_clinics: List[RawClinic] = []
@@ -24,6 +29,11 @@ def smart_cascade_dedup(clinics: List[RawClinic]) -> List[RawClinic]:
     brand_street_index: Dict[Tuple[str, str], int] = {}
     exact_name_index: Dict[str, int] = {}
 
+    social_domains = dedup_rules.social_domains if dedup_rules else None
+    aggregator_domains = dedup_rules.aggregator_domains if dedup_rules else None
+    brand_stop_words = dedup_rules.brand_stop_words if dedup_rules else None
+    street_stop_words = dedup_rules.street_stop_words if dedup_rules else None
+
     for c in clinics:
         # Нормализация номеров телефонов
         c.phones = [normalize_phone(p) for p in c.phones if p]
@@ -31,7 +41,11 @@ def smart_cascade_dedup(clinics: List[RawClinic]) -> List[RawClinic]:
         match_idx: Optional[int] = None
 
         # 1. Сравнение по чистому домену / профилю VK / Taplink
-        dom = extract_clean_domain(c.site)
+        dom = extract_clean_domain(
+            c.site,
+            social_domains=social_domains,
+            aggregator_domains=aggregator_domains
+        )
         if dom and dom in domain_index:
             match_idx = domain_index[dom]
 
@@ -44,8 +58,8 @@ def smart_cascade_dedup(clinics: List[RawClinic]) -> List[RawClinic]:
                     break
 
         # 3. Сравнение по очищенному бренду и улице
-        brand = clean_brand_name(c.name)
-        street = extract_street_keyword(c.address)
+        brand = clean_brand_name(c.name, stop_words=brand_stop_words)
+        street = extract_street_keyword(c.address, city=city, stop_words=street_stop_words)
         if match_idx is None and len(brand) >= 3 and street:
             key = (brand, street)
             if key in brand_street_index:

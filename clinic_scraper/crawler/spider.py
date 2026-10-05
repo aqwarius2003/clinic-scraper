@@ -20,26 +20,29 @@ class SmartCrawler:
 
     def __init__(self, settings: AppSettings):
         self.settings = settings
+        self.crawler_cfg = settings.crawler
         self.cache = Cache(str(settings.cache_dir))
-        self.http_fetcher = HttpFetcher(self.cache, timeout=settings.crawler_timeout)
-        self.pw_fetcher = PlaywrightFetcher(self.cache)
-        self.concurrency = settings.crawler_concurrency
-        self.max_pages = settings.crawler_max_pages
+        self.http_fetcher = HttpFetcher(self.cache, timeout=self.crawler_cfg.timeout)
+        self.pw_fetcher = PlaywrightFetcher(
+            self.cache,
+            timeout_ms=self.crawler_cfg.playwright_timeout_ms,
+            wait_ms=self.crawler_cfg.playwright_wait_ms
+        )
+        self.concurrency = self.crawler_cfg.concurrency
+        self.max_pages = self.crawler_cfg.max_pages_per_site
+        self.max_text_chars = self.crawler_cfg.max_text_chars
+        self.max_emails = self.crawler_cfg.max_emails
+        self.patterns = self.crawler_cfg.target_link_patterns
         self.use_pw_fallback = settings.use_playwright_fallback
 
     def extract_links(self, html: str, base_url: str) -> List[str]:
-        """Находит ссылки на ключевые разделы: прайсы, врачи/специалисты, контакты."""
+        """Находит ссылки на ключевые разделы по заданным в конфиге шаблонам."""
         soup = BeautifulSoup(html, "lxml")
-        patterns = [
-            r"(price|prays|uslug|service|tsen|cost|цен|прайс|услуг)",
-            r"(vrach|doctor|specialist|team|kollektiv|врач|специалист|команда|о-нас)",
-            r"(contact|kontakty|контакт)"
-        ]
         links: List[str] = []
         for a in soup.find_all("a", href=True):
             href = a.get("href", "").lower()
             text = a.get_text(" ", strip=True).lower()
-            if any(re.search(p, f"{href} {text}") for p in patterns):
+            if any(re.search(p, f"{href} {text}") for p in self.patterns):
                 full = urljoin(base_url, a["href"])
                 if full.startswith("http"):
                     links.append(full)
@@ -80,7 +83,7 @@ class SmartCrawler:
             emails.add(a["href"].replace("mailto:", "").split("?")[0])
 
         # Параллельный сбор целевых подстраниц сайта
-        sublinks = self.extract_links(html, clinic.site)[:3]
+        sublinks = self.extract_links(html, clinic.site)[:self.max_pages]
         if sublinks:
             subpages_results = await asyncio.gather(
                 *(self.http_fetcher.fetch(client, link) for link in sublinks)
@@ -91,8 +94,8 @@ class SmartCrawler:
                     all_text += " " + sub_soup.get_text(" ", strip=True)
 
         return {
-            "text": all_text[:35000],
-            "emails": list(emails)[:3],
+            "text": all_text[:self.max_text_chars],
+            "emails": list(emails)[:self.max_emails],
             "status": status,
         }
 

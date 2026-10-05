@@ -1,7 +1,7 @@
 """Сетевые заголовки, punycode-трансляция и нормализаторы контактов."""
 
 import re
-from typing import Dict
+from typing import Dict, List, Optional
 from urllib.parse import urlparse, quote
 
 REALISTIC_HEADERS: Dict[str, str] = {
@@ -18,6 +18,21 @@ REALISTIC_HEADERS: Dict[str, str] = {
     "Sec-Fetch-User": "?1",
     "Upgrade-Insecure-Requests": "1",
 }
+
+DEFAULT_SOCIAL_DOMAINS = ["vk.com", "taplink.cc", "t.me"]
+DEFAULT_AGGREGATOR_DOMAINS = ["2gis", "yandex", "zoon", "prodoctorov", "doctu", "yell"]
+DEFAULT_BRAND_STOP_WORDS = [
+    "ооо", "зао", "пао", "ао", "ип", "клиника", "клиники", "центр", "сеть",
+    "салон", "салоны", "красоты", "медицинский", "медицинская", "медицинские",
+    "эстетическая", "эстетической", "эстетическ", "эстетик",
+    "стоматология", "стоматологии", "стоматологическая",
+    "косметология", "косметологии", "косметологическая",
+    "кабинет", "доктор", "врач", "отделение"
+]
+DEFAULT_STREET_STOP_WORDS = [
+    "г.", "город", "ул.", "улица", "пр-кт", "проспект", "пер.", "переулок",
+    "д.", "дом", "к.", "корпус", "оф.", "офис", "литер", "эт.", "этаж"
+]
 
 
 def to_punycode_url(url: str) -> str:
@@ -67,10 +82,16 @@ def phone_digits_key(phone: str) -> str:
     return digits
 
 
-def extract_clean_domain(url: str) -> str:
+def extract_clean_domain(
+    url: str,
+    social_domains: Optional[List[str]] = None,
+    aggregator_domains: Optional[List[str]] = None
+) -> str:
     """Извлекает чистый домен или путь к профилю (VK, Taplink, T.me) для каскадной дедупликации."""
     if not url:
         return ""
+    socials = social_domains if social_domains is not None else DEFAULT_SOCIAL_DOMAINS
+    aggregators = aggregator_domains if aggregator_domains is not None else DEFAULT_AGGREGATOR_DOMAINS
     try:
         url_lower = url.lower().strip()
         parsed = urlparse(url_lower if "://" in url_lower else f"http://{url_lower}")
@@ -81,43 +102,45 @@ def extract_clean_domain(url: str) -> str:
             host = host.encode("idna").decode("ascii")
         except Exception:
             pass
-        if any(soc in host for soc in ["vk.com", "taplink.cc", "t.me"]):
+        if any(soc in host for soc in socials):
             path = parsed.path.rstrip("/").lower()
             return f"{host}{path}"
-        if any(agg in host for agg in ["2gis", "yandex", "zoon", "prodoctorov", "doctu", "yell"]):
+        if any(agg in host for agg in aggregators):
             return ""
         return host
     except Exception:
         return ""
 
 
-def clean_brand_name(name: str) -> str:
+def clean_brand_name(name: str, stop_words: Optional[List[str]] = None) -> str:
     """Очищает наименование от форм собственности и типовых медицинских префиксов."""
     s = name.lower()
     s = re.sub(r"[«»\"'“”„`]", " ", s)
-    s = re.sub(
-        r"\b(ооо|зао|пао|ао|ип|клиника|клиники|центр|сеть|салон|салоны|красоты|медицинский|медицинская|медицинские|"
-        r"эстетическая|эстетической|эстетическ|эстетик|"
-        r"стоматология|стоматологии|стоматологическая|косметология|косметологии|косметологическая|кабинет|доктор|врач|отделение)\b",
-        " ",
-        s
-    )
+    words = stop_words if stop_words is not None else DEFAULT_BRAND_STOP_WORDS
+    if words:
+        pattern = r"\b(" + "|".join(re.escape(w) for w in words) + r")\b"
+        s = re.sub(pattern, " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
 
-def extract_street_keyword(address: str, city: str = "") -> str:
+def extract_street_keyword(
+    address: str,
+    city: str = "",
+    stop_words: Optional[List[str]] = None
+) -> str:
     """Выделяет ключевое слово улицы для объединения филиалов/дублей по адресу."""
     if not address:
         return ""
     addr_l = address.lower()
     city_tokens = [c.lower() for c in re.split(r"[\s,-]+", city) if len(c) > 2] if city else []
     city_pattern = r"|".join(re.escape(c) for c in city_tokens) if city_tokens else r"хабаровск"
+    words = stop_words if stop_words is not None else DEFAULT_STREET_STOP_WORDS
+    words_pattern = r"|".join(re.escape(w) for w in words)
     addr_l = re.sub(
-        rf"\b(г\.|город|{city_pattern}|ул\.|улица|пр-кт|проспект|пер\.|переулок|д\.|дом|к\.|корпус|оф\.|офис|литер|эт\.|этаж)\b",
+        rf"\b({city_pattern}|{words_pattern})\b",
         " ",
         addr_l
     )
     tokens = [t for t in re.split(r"[\s,]+", addr_l) if len(t) > 3 and not t.isdigit()]
     return tokens[0] if tokens else ""
-

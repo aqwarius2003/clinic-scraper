@@ -16,11 +16,16 @@ class DGisHarvester(BaseHarvester):
 
     def __init__(self, settings: AppSettings):
         self.settings = settings
+        self.dgis_cfg = settings.harvesters.dgis
         self.city = settings.city
         self.queries = settings.search_config.search_queries
         self.stop_words = [sw.lower() for sw in settings.search_config.stop_words_gov]
         self.public_keys = settings.public_keys_2gis
-        self.max_pages = settings.max_pages_2gis
+        self.max_pages = self.dgis_cfg.max_pages
+        self.page_size = self.dgis_cfg.page_size
+        self.base_url = self.dgis_cfg.base_url
+        self.timeout = self.dgis_cfg.timeout_seconds
+        self.delay = self.dgis_cfg.request_delay_seconds
 
     async def _fetch_page(
         self,
@@ -29,11 +34,10 @@ class DGisHarvester(BaseHarvester):
         page: int,
         api_key: str
     ) -> List[Dict[str, Any]]:
-        url = "https://catalog.api.2gis.com/3.0/items"
         params = {
             "q": f"{query} {self.city}",
             "page": page,
-            "page_size": 50,
+            "page_size": self.page_size,
             "fields": "items.contact_groups,items.point,items.rubrics,items.address,items.org,items.general_info,items.schedule",
             "key": api_key,
             "locale": "ru_RU",
@@ -43,7 +47,7 @@ class DGisHarvester(BaseHarvester):
             "Referer": "https://2gis.ru/",
         }
         try:
-            resp = await client.get(url, params=params, headers=headers, timeout=15)
+            resp = await client.get(self.base_url, params=params, headers=headers, timeout=self.timeout)
             if resp.status_code == 200:
                 return resp.json().get("result", {}).get("items", [])
         except Exception as e:
@@ -51,8 +55,9 @@ class DGisHarvester(BaseHarvester):
         return []
 
     async def _find_working_key(self, client: httpx.AsyncClient) -> Optional[str]:
+        test_query = self.queries[0] if self.queries else "медицинский центр"
         for key in self.public_keys:
-            items = await self._fetch_page(client, "косметология", 1, key)
+            items = await self._fetch_page(client, test_query, 1, key)
             if items:
                 logger.info(f"Рабочий публичный ключ 2GIS подтвержден: {key}")
                 return key
@@ -113,7 +118,7 @@ class DGisHarvester(BaseHarvester):
                             snippet=" | ".join(snippet_parts)
                         )
 
-                    await asyncio.sleep(0.35)
+                    await asyncio.sleep(self.delay)
 
         logger.info(f"2GIS успешно собрал: {len(clinics)} уникальных организаций")
         return list(clinics.values())

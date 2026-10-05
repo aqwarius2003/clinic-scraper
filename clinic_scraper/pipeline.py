@@ -5,7 +5,6 @@ import json
 import signal
 import sys
 import time
-from pathlib import Path
 from typing import List, Dict, Any
 
 from clinic_scraper.analyzer.gemini import GeminiAnalyzer
@@ -25,24 +24,27 @@ class Pipeline:
 
     def __init__(self, settings: AppSettings):
         self.settings = settings
+        self.city_default = settings.search_config.city_default
+        self.checkpoint_interval = settings.pipeline.checkpoint_interval
+
         self.raw_file = settings.data_dir / f"raw_clinics_{settings.city}.json"
         self.crawled_file = settings.data_dir / f"crawled_sites_{settings.city}.json"
         self.checkpoint_file = settings.data_dir / f"analyzed_checkpoint_{settings.city}.json"
 
-        # Обратная совместимость с дефолтными именами файлов
-        if not self.raw_file.exists() and (settings.data_dir / "raw_clinics.json").exists() and settings.city == "Хабаровск":
+        # Обратная совместимость с ранее собранными файлами дефолтного города
+        if not self.raw_file.exists() and (settings.data_dir / "raw_clinics.json").exists() and settings.city == self.city_default:
             self.raw_file = settings.data_dir / "raw_clinics.json"
-        if not self.crawled_file.exists() and (settings.data_dir / "crawled_sites.json").exists() and settings.city == "Хабаровск":
+        if not self.crawled_file.exists() and (settings.data_dir / "crawled_sites.json").exists() and settings.city == self.city_default:
             self.crawled_file = settings.data_dir / "crawled_sites.json"
-        if not self.checkpoint_file.exists() and (settings.data_dir / "analyzed_checkpoint.json").exists() and settings.city == "Хабаровск":
+        if not self.checkpoint_file.exists() and (settings.data_dir / "analyzed_checkpoint.json").exists() and settings.city == self.city_default:
             self.checkpoint_file = settings.data_dir / "analyzed_checkpoint.json"
 
         self.output_excel = settings.output_dir / f"{settings.city}_Клиники_Пилот.xlsx"
 
         self.pool = GeminiPool(
             keys=settings.gemini_api_keys,
-            rpm=settings.gemini_rpm,
-            tpm=settings.gemini_tpm,
+            rpm=settings.gemini.rpm,
+            tpm=settings.gemini.tpm,
         )
         self.gemini_analyzer = GeminiAnalyzer(settings, self.pool)
         self.regex_filter = RegexFilter(settings.search_config)
@@ -74,10 +76,18 @@ class Pipeline:
             logger.info(f"Используем кэшированные гео-данные из {self.raw_file}")
             with open(self.raw_file, "r", encoding="utf-8") as f:
                 raw_items = [RawClinic.from_dict(item) for item in json.load(f)]
-            return smart_cascade_dedup(raw_items)
+            return smart_cascade_dedup(
+                raw_items,
+                dedup_rules=self.settings.search_config.dedup_rules,
+                city=self.settings.city
+            )
 
         raw = await harvest_all(self.settings)
-        cleaned = smart_cascade_dedup(raw)
+        cleaned = smart_cascade_dedup(
+            raw,
+            dedup_rules=self.settings.search_config.dedup_rules,
+            city=self.settings.city
+        )
         with open(self.raw_file, "w", encoding="utf-8") as f:
             json.dump([c.to_dict() for c in cleaned], f, ensure_ascii=False, indent=2)
         logger.info(f"Гео-данные сохранены в {self.raw_file}")
@@ -124,7 +134,7 @@ class Pipeline:
         original_handler = signal.getsignal(signal.SIGINT)
         signal.signal(signal.SIGINT, sigint_handler)
 
-        semaphore = asyncio.Semaphore(self.settings.gemini_concurrency)
+        semaphore = asyncio.Semaphore(self.settings.gemini.concurrency)
 
         async def process_one(idx: int, item: Dict[str, Any]) -> None:
             nonlocal completed_counter
@@ -192,7 +202,7 @@ class Pipeline:
                     f"Инъекции: {injection:<5} | PRP: {prp_brand}"
                 )
 
-                if completed_counter % 15 == 0:
+                if completed_counter % self.checkpoint_interval == 0:
                     self.save_checkpoint(checkpoint)
                     export_to_excel(list(records_map.values()), self.output_excel)
 
@@ -216,8 +226,9 @@ class Pipeline:
         start = time.time()
         logger.info("=" * 65)
         logger.info(f"ЗАПУСК ПАЙПЛАЙНА CLINIC_SCRAPER ({self.settings.city.upper()})")
-        logger.info(f"Пул Gemini ключей: {len(self.settings.gemini_api_keys)} шт. | Модель: {self.settings.gemini_model}")
-        logger.info(f"Конкурентность анализа: {self.settings.gemini_concurrency} потоков")
+        logger.info(f"Пул Gemini ключей: {len(self.settings.gemini_api_keys)} шт. | Модель: {self.settings.gemini.model}")
+        logger.info(f"Конкурентность анализа: {self.settings.gemini.concurrency} потоков")
+        logger.info(f"Интервал сохранения чекпоинта: каждые {self.checkpoint_interval} клиник")
         logger.info("=" * 65)
 
         cleaned = await self.run_harvester(force_reharvest=force_reharvest)
