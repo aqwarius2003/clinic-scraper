@@ -24,7 +24,7 @@ class Pipeline:
 
     def __init__(self, settings: AppSettings):
         self.settings = settings
-        self.city_default = settings.search_config.city_default
+        self.city_default = settings.search_config.city
         self.checkpoint_interval = settings.pipeline.checkpoint_interval
 
         self.raw_file = settings.data_dir / f"raw_clinics_{settings.city}.json"

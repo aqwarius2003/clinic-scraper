@@ -9,7 +9,7 @@ def test_load_search_config():
     assert config_path.exists(), "Файл config/search_config.json должен существовать"
 
     cfg = load_search_config(config_path)
-    assert cfg.city_default == "Хабаровск"
+    assert cfg.city == "Хабаровск"
     assert len(cfg.search_queries) >= 10
     assert "косметология" in cfg.search_queries
     assert "гбуз" in cfg.stop_words_gov

@@ -88,7 +88,7 @@ class PipelineConfig(BaseModel):
 
 
 class SearchConfig(BaseModel):
-    city_default: str = "Хабаровск"
+    city: str = "Хабаровск"
     search_queries: List[str] = Field(default_factory=list)
     stop_words_gov: List[str] = Field(default_factory=list)
     prp_brands: Dict[str, List[str]] = Field(default_factory=dict)
@@ -141,7 +141,7 @@ def get_settings(
     selected_city = (
         city
         or os.getenv("CITY")
-        or search_cfg.city_default
+        or search_cfg.city
     ).strip()
 
     # 2. Ключи Gemini: ENV > пусто
