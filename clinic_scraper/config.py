@@ -1,6 +1,7 @@
 """Конфигурация приложения ClinicScraper.
-Объединяет параметры окружения (.env) и бизнес-правила (search_config.json).
-Все параметры вынесены из кода и могут переопределяться через .env или JSON-конфиг.
+Разделение ответственности:
+- search_config.json: строго предметная область (что ищем, как квалифицируем, с каким промптом)
+- AppSettings / .env: инфраструктура, секреты, квоты, потоки и тайм-ауты
 """
 
 import json
@@ -12,6 +13,10 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
+
+# ==============================================================================
+# 1. МОДЕЛИ ПРЕДМЕТНОЙ КОНФИГУРАЦИИ (search_config.json)
+# ==============================================================================
 
 class RegexFilterConfig(BaseModel):
     injection_keywords: List[str] = Field(default_factory=list)
@@ -27,9 +32,7 @@ class DedupRulesConfig(BaseModel):
     street_stop_words: List[str] = Field(default_factory=list)
 
 
-class CrawlerConfig(BaseModel):
-    concurrency: int = 8
-    timeout: int = 15
+class CrawlerSearchConfig(BaseModel):
     max_pages_per_site: int = 4
     max_text_chars: int = 35000
     max_emails: int = 3
@@ -40,86 +43,98 @@ class CrawlerConfig(BaseModel):
             r"(contact|kontakty|контакт)"
         ]
     )
-    playwright_timeout_ms: int = 20000
-    playwright_wait_ms: int = 2500
 
 
-class DGisConfig(BaseModel):
-    base_url: str = "https://catalog.api.2gis.com/3.0/items"
+class DGisSearchConfig(BaseModel):
     page_size: int = 50
     max_pages: int = 5
-    request_delay_seconds: float = 0.35
-    timeout_seconds: int = 15
 
 
-class YandexConfig(BaseModel):
+class YandexSearchConfig(BaseModel):
     max_results_per_query: int = 70
     scroll_count: int = 7
-    scroll_delta: int = 2200
-    scroll_wait_ms: int = 1100
-    load_timeout_ms: int = 35000
-    initial_wait_ms: int = 3500
-    viewport_width: int = 1400
-    viewport_height: int = 900
 
 
-class HarvestersConfig(BaseModel):
-    dgis: DGisConfig = Field(default_factory=DGisConfig)
-    yandex: YandexConfig = Field(default_factory=YandexConfig)
+class HarvestersSearchConfig(BaseModel):
+    dgis: DGisSearchConfig = Field(default_factory=DGisSearchConfig)
+    yandex: YandexSearchConfig = Field(default_factory=YandexSearchConfig)
 
 
-class GeminiConfig(BaseModel):
-    model: str = "gemini-3.1-flash-lite"
-    temperature: float = 0.1
-    rpm: int = 14
-    tpm: int = 250000
-    concurrency: int = 4
-    max_retries: int = 3
-    backoff_seconds: float = 5.0
-    max_prompt_chars: int = 28000
+class GeminiSearchConfig(BaseModel):
     prompt_template: str
 
 
-class PipelineConfig(BaseModel):
-    checkpoint_interval: int = 15
-    data_dir: str = "data"
-    output_dir: str = "output"
-    cache_dir: str = "cache"
-
-
 class SearchConfig(BaseModel):
+    """Творческая предметная конфигурация: что ищем, чем фильтруем и с каким промптом."""
     city: str = "Хабаровск"
     search_queries: List[str] = Field(default_factory=list)
     stop_words_gov: List[str] = Field(default_factory=list)
     prp_brands: Dict[str, List[str]] = Field(default_factory=dict)
     regex_filter: RegexFilterConfig = Field(default_factory=RegexFilterConfig)
     dedup_rules: DedupRulesConfig = Field(default_factory=DedupRulesConfig)
-    crawler: CrawlerConfig = Field(default_factory=CrawlerConfig)
-    harvesters: HarvestersConfig = Field(default_factory=HarvestersConfig)
-    gemini: GeminiConfig
-    pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
+    crawler: CrawlerSearchConfig = Field(default_factory=CrawlerSearchConfig)
+    harvesters: HarvestersSearchConfig = Field(default_factory=HarvestersSearchConfig)
+    gemini: GeminiSearchConfig
 
+
+# ==============================================================================
+# 2. СИСТЕМНЫЕ И ИНФРАСТРУКТУРНЫЕ НАСТРОЙКИ (AppSettings / .env)
+# ==============================================================================
 
 class AppSettings(BaseModel):
-    """Итоговые настройки приложения, объединяющие CLI, .env и search_config.json."""
+    """Инфраструктурные и системные параметры приложения."""
     city: str
+
+    # Секреты и ключи
     gemini_api_keys: List[str] = Field(default_factory=list)
     public_keys_2gis: List[str] = Field(default_factory=list)
+
+    # Флаги источников
     use_2gis: bool = True
     use_yandex: bool = True
     use_playwright_fallback: bool = True
-    crawler: CrawlerConfig
-    harvesters: HarvestersConfig
-    gemini: GeminiConfig
-    pipeline: PipelineConfig
+
+    # Инфраструктура краулера
+    crawler_concurrency: int = 8
+    crawler_timeout: int = 15
+    playwright_timeout_ms: int = 20000
+    playwright_wait_ms: int = 2500
+
+    # Сетевые параметры 2GIS
+    dgis_request_delay: float = 0.35
+    dgis_timeout: int = 15
+    dgis_base_url: str = "https://catalog.api.2gis.com/3.0/items"
+
+    # Сетевые параметры Яндекс
+    yandex_scroll_delta: int = 2200
+    yandex_scroll_wait_ms: int = 1100
+    yandex_load_timeout_ms: int = 35000
+    yandex_initial_wait_ms: int = 3500
+    yandex_viewport_width: int = 1400
+    yandex_viewport_height: int = 900
+
+    # Технические квоты и параметры Gemini
+    gemini_model: str = "gemini-3.1-flash-lite"
+    gemini_temperature: float = 0.1
+    gemini_rpm: int = 14
+    gemini_tpm: int = 250000
+    gemini_concurrency: int = 4
+    gemini_max_retries: int = 3
+    gemini_backoff_seconds: float = 5.0
+    gemini_max_prompt_chars: int = 28000
+
+    # Пайплайн и пути
+    checkpoint_interval: int = 15
     data_dir: Path
     output_dir: Path
     cache_dir: Path
+
+    # Ссылка на предметную конфигурацию
     search_config: SearchConfig
 
 
 def load_search_config(config_path: Optional[Path] = None) -> SearchConfig:
-    """Загружает JSON с поисковыми словами, правилами отсечения и промптами."""
+    """Загружает JSON с предметными поисковыми словами и правилами."""
     if config_path is None:
         config_path = Path("config") / "search_config.json"
     if not config_path.exists():
@@ -134,96 +149,37 @@ def get_settings(
     city: Optional[str] = None,
     config_path: Optional[Path] = None
 ) -> AppSettings:
-    """Инициализирует и возвращает экземпляр AppSettings с иерархией: CLI > .env > search_config.json."""
+    """Инициализирует системные AppSettings (.env + defaults) и загружает search_config.json."""
     search_cfg = load_search_config(config_path)
 
-    # 1. Город: CLI флаг > ENV > search_config.json
+    # Город: CLI > ENV > search_config.json
     selected_city = (
         city
         or os.getenv("CITY")
         or search_cfg.city
     ).strip()
 
-    # 2. Ключи Gemini: ENV > пусто
+    # Секреты Gemini
     raw_keys = os.getenv("GEMINI_API_KEYS", "") or os.getenv("GEMINI_API_KEY", "")
     gemini_keys = [
         k.strip() for k in raw_keys.split(",")
         if k.strip() and not k.strip().startswith("ВСТАВЬ")
     ]
 
-    # 3. Ключи 2GIS: ENV > дефолт
+    # Секреты 2GIS
     raw_2gis = os.getenv("PUBLIC_KEYS_2GIS", "")
     if raw_2gis:
         keys_2gis = [k.strip() for k in raw_2gis.split(",") if k.strip()]
     else:
         keys_2gis = ["ruzhub8994", "rurbbn3446", "ruregt3044"]
 
-    # 4. Конфигурация Crawler с поддержкой ENV
-    crawler_cfg = search_cfg.crawler.model_copy()
-    if os.getenv("CRAWLER_CONCURRENCY"):
-        crawler_cfg.concurrency = int(os.environ["CRAWLER_CONCURRENCY"])
-    if os.getenv("CRAWLER_TIMEOUT"):
-        crawler_cfg.timeout = int(os.environ["CRAWLER_TIMEOUT"])
-    if os.getenv("CRAWLER_MAX_PAGES"):
-        crawler_cfg.max_pages_per_site = int(os.environ["CRAWLER_MAX_PAGES"])
-    if os.getenv("CRAWLER_MAX_TEXT_CHARS"):
-        crawler_cfg.max_text_chars = int(os.environ["CRAWLER_MAX_TEXT_CHARS"])
-    if os.getenv("CRAWLER_MAX_EMAILS"):
-        crawler_cfg.max_emails = int(os.environ["CRAWLER_MAX_EMAILS"])
-    if os.getenv("PLAYWRIGHT_TIMEOUT_MS"):
-        crawler_cfg.playwright_timeout_ms = int(os.environ["PLAYWRIGHT_TIMEOUT_MS"])
-    if os.getenv("PLAYWRIGHT_WAIT_MS"):
-        crawler_cfg.playwright_wait_ms = int(os.environ["PLAYWRIGHT_WAIT_MS"])
-
-    # 5. Конфигурация Harvesters с поддержкой ENV
-    harvesters_cfg = search_cfg.harvesters.model_copy()
-    if os.getenv("MAX_PAGES_2GIS"):
-        harvesters_cfg.dgis.max_pages = int(os.environ["MAX_PAGES_2GIS"])
-    if os.getenv("DGIS_REQUEST_DELAY"):
-        harvesters_cfg.dgis.request_delay_seconds = float(os.environ["DGIS_REQUEST_DELAY"])
-    if os.getenv("DGIS_TIMEOUT"):
-        harvesters_cfg.dgis.timeout_seconds = int(os.environ["DGIS_TIMEOUT"])
-    if os.getenv("DGIS_PAGE_SIZE"):
-        harvesters_cfg.dgis.page_size = int(os.environ["DGIS_PAGE_SIZE"])
-
-    if os.getenv("MAX_RESULTS_YANDEX"):
-        harvesters_cfg.yandex.max_results_per_query = int(os.environ["MAX_RESULTS_YANDEX"])
-    if os.getenv("YANDEX_SCROLL_COUNT"):
-        harvesters_cfg.yandex.scroll_count = int(os.environ["YANDEX_SCROLL_COUNT"])
-    if os.getenv("YANDEX_LOAD_TIMEOUT_MS"):
-        harvesters_cfg.yandex.load_timeout_ms = int(os.environ["YANDEX_LOAD_TIMEOUT_MS"])
-
-    # 6. Конфигурация Gemini с поддержкой ENV
-    gemini_cfg = search_cfg.gemini.model_copy()
-    if os.getenv("GEMINI_MODEL"):
-        gemini_cfg.model = os.environ["GEMINI_MODEL"]
-    if os.getenv("GEMINI_TEMPERATURE"):
-        gemini_cfg.temperature = float(os.environ["GEMINI_TEMPERATURE"])
-    if os.getenv("GEMINI_RPM"):
-        gemini_cfg.rpm = int(os.environ["GEMINI_RPM"])
-    if os.getenv("GEMINI_TPM"):
-        gemini_cfg.tpm = int(os.environ["GEMINI_TPM"])
-    if os.getenv("GEMINI_CONCURRENCY"):
-        gemini_cfg.concurrency = int(os.environ["GEMINI_CONCURRENCY"])
-    if os.getenv("GEMINI_MAX_RETRIES"):
-        gemini_cfg.max_retries = int(os.environ["GEMINI_MAX_RETRIES"])
-    if os.getenv("GEMINI_BACKOFF_SECONDS"):
-        gemini_cfg.backoff_seconds = float(os.environ["GEMINI_BACKOFF_SECONDS"])
-    if os.getenv("GEMINI_MAX_PROMPT_CHARS"):
-        gemini_cfg.max_prompt_chars = int(os.environ["GEMINI_MAX_PROMPT_CHARS"])
-
-    # 7. Конфигурация пайплайна и путей
-    pipeline_cfg = search_cfg.pipeline.model_copy()
-    if os.getenv("CHECKPOINT_INTERVAL"):
-        pipeline_cfg.checkpoint_interval = int(os.environ["CHECKPOINT_INTERVAL"])
-
-    data_dir_path = Path(os.getenv("DATA_DIR", pipeline_cfg.data_dir))
+    data_dir_path = Path(os.getenv("DATA_DIR", "data"))
     data_dir_path.mkdir(parents=True, exist_ok=True)
 
-    output_dir_path = Path(os.getenv("OUTPUT_DIR", pipeline_cfg.output_dir))
+    output_dir_path = Path(os.getenv("OUTPUT_DIR", "output"))
     output_dir_path.mkdir(parents=True, exist_ok=True)
 
-    cache_dir_path = Path(os.getenv("CACHE_DIR", pipeline_cfg.cache_dir))
+    cache_dir_path = Path(os.getenv("CACHE_DIR", "cache"))
     cache_dir_path.mkdir(parents=True, exist_ok=True)
 
     return AppSettings(
@@ -233,10 +189,28 @@ def get_settings(
         use_2gis=os.getenv("USE_2GIS", "true").lower() in ("true", "1", "yes"),
         use_yandex=os.getenv("USE_YANDEX", "true").lower() in ("true", "1", "yes"),
         use_playwright_fallback=os.getenv("USE_PLAYWRIGHT_FALLBACK", "true").lower() in ("true", "1", "yes"),
-        crawler=crawler_cfg,
-        harvesters=harvesters_cfg,
-        gemini=gemini_cfg,
-        pipeline=pipeline_cfg,
+        crawler_concurrency=int(os.getenv("CRAWLER_CONCURRENCY", "8")),
+        crawler_timeout=int(os.getenv("CRAWLER_TIMEOUT", "15")),
+        playwright_timeout_ms=int(os.getenv("PLAYWRIGHT_TIMEOUT_MS", "20000")),
+        playwright_wait_ms=int(os.getenv("PLAYWRIGHT_WAIT_MS", "2500")),
+        dgis_request_delay=float(os.getenv("DGIS_REQUEST_DELAY", "0.35")),
+        dgis_timeout=int(os.getenv("DGIS_TIMEOUT", "15")),
+        dgis_base_url=os.getenv("DGIS_BASE_URL", "https://catalog.api.2gis.com/3.0/items"),
+        yandex_scroll_delta=int(os.getenv("YANDEX_SCROLL_DELTA", "2200")),
+        yandex_scroll_wait_ms=int(os.getenv("YANDEX_SCROLL_WAIT_MS", "1100")),
+        yandex_load_timeout_ms=int(os.getenv("YANDEX_LOAD_TIMEOUT_MS", "35000")),
+        yandex_initial_wait_ms=int(os.getenv("YANDEX_INITIAL_WAIT_MS", "3500")),
+        yandex_viewport_width=int(os.getenv("YANDEX_VIEWPORT_WIDTH", "1400")),
+        yandex_viewport_height=int(os.getenv("YANDEX_VIEWPORT_HEIGHT", "900")),
+        gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite"),
+        gemini_temperature=float(os.getenv("GEMINI_TEMPERATURE", "0.1")),
+        gemini_rpm=int(os.getenv("GEMINI_RPM", "14")),
+        gemini_tpm=int(os.getenv("GEMINI_TPM", "250000")),
+        gemini_concurrency=int(os.getenv("GEMINI_CONCURRENCY", "4")),
+        gemini_max_retries=int(os.getenv("GEMINI_MAX_RETRIES", "3")),
+        gemini_backoff_seconds=float(os.getenv("GEMINI_BACKOFF_SECONDS", "5.0")),
+        gemini_max_prompt_chars=int(os.getenv("GEMINI_MAX_PROMPT_CHARS", "28000")),
+        checkpoint_interval=int(os.getenv("CHECKPOINT_INTERVAL", "15")),
         data_dir=data_dir_path,
         output_dir=output_dir_path,
         cache_dir=cache_dir_path,

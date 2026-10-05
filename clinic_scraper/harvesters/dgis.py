@@ -16,16 +16,16 @@ class DGisHarvester(BaseHarvester):
 
     def __init__(self, settings: AppSettings):
         self.settings = settings
-        self.dgis_cfg = settings.harvesters.dgis
+        self.dgis_search_cfg = settings.search_config.harvesters.dgis
         self.city = settings.city
         self.queries = settings.search_config.search_queries
         self.stop_words = [sw.lower() for sw in settings.search_config.stop_words_gov]
         self.public_keys = settings.public_keys_2gis
-        self.max_pages = self.dgis_cfg.max_pages
-        self.page_size = self.dgis_cfg.page_size
-        self.base_url = self.dgis_cfg.base_url
-        self.timeout = self.dgis_cfg.timeout_seconds
-        self.delay = self.dgis_cfg.request_delay_seconds
+        self.max_pages = self.dgis_search_cfg.max_pages
+        self.page_size = self.dgis_search_cfg.page_size
+        self.base_url = settings.dgis_base_url
+        self.timeout = settings.dgis_timeout
+        self.delay = settings.dgis_request_delay
 
     async def _fetch_page(
         self,

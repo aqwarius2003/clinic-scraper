@@ -15,19 +15,19 @@ class YandexHarvester(BaseHarvester):
 
     def __init__(self, settings: AppSettings):
         self.settings = settings
-        self.yandex_cfg = settings.harvesters.yandex
+        self.yandex_search_cfg = settings.search_config.harvesters.yandex
         self.city = settings.city
         self.queries = settings.search_config.search_queries
         self.stop_words = [sw.lower() for sw in settings.search_config.stop_words_gov]
-        self.max_results = self.yandex_cfg.max_results_per_query
-        self.scroll_count = self.yandex_cfg.scroll_count
-        self.scroll_delta = self.yandex_cfg.scroll_delta
-        self.scroll_wait_ms = self.yandex_cfg.scroll_wait_ms
-        self.load_timeout_ms = self.yandex_cfg.load_timeout_ms
-        self.initial_wait_ms = self.yandex_cfg.initial_wait_ms
+        self.max_results = self.yandex_search_cfg.max_results_per_query
+        self.scroll_count = self.yandex_search_cfg.scroll_count
+        self.scroll_delta = settings.yandex_scroll_delta
+        self.scroll_wait_ms = settings.yandex_scroll_wait_ms
+        self.load_timeout_ms = settings.yandex_load_timeout_ms
+        self.initial_wait_ms = settings.yandex_initial_wait_ms
         self.viewport = {
-            "width": self.yandex_cfg.viewport_width,
-            "height": self.yandex_cfg.viewport_height,
+            "width": settings.yandex_viewport_width,
+            "height": settings.yandex_viewport_height,
         }
 
     async def harvest(self) -> List[RawClinic]:

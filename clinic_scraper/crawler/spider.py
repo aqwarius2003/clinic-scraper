@@ -20,19 +20,19 @@ class SmartCrawler:
 
     def __init__(self, settings: AppSettings):
         self.settings = settings
-        self.crawler_cfg = settings.crawler
+        self.crawler_search_cfg = settings.search_config.crawler
         self.cache = Cache(str(settings.cache_dir))
-        self.http_fetcher = HttpFetcher(self.cache, timeout=self.crawler_cfg.timeout)
+        self.http_fetcher = HttpFetcher(self.cache, timeout=settings.crawler_timeout)
         self.pw_fetcher = PlaywrightFetcher(
             self.cache,
-            timeout_ms=self.crawler_cfg.playwright_timeout_ms,
-            wait_ms=self.crawler_cfg.playwright_wait_ms
+            timeout_ms=settings.playwright_timeout_ms,
+            wait_ms=settings.playwright_wait_ms
         )
-        self.concurrency = self.crawler_cfg.concurrency
-        self.max_pages = self.crawler_cfg.max_pages_per_site
-        self.max_text_chars = self.crawler_cfg.max_text_chars
-        self.max_emails = self.crawler_cfg.max_emails
-        self.patterns = self.crawler_cfg.target_link_patterns
+        self.concurrency = settings.crawler_concurrency
+        self.max_pages = self.crawler_search_cfg.max_pages_per_site
+        self.max_text_chars = self.crawler_search_cfg.max_text_chars
+        self.max_emails = self.crawler_search_cfg.max_emails
+        self.patterns = self.crawler_search_cfg.target_link_patterns
         self.use_pw_fallback = settings.use_playwright_fallback
 
     def extract_links(self, html: str, base_url: str) -> List[str]:

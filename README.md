@@ -140,12 +140,17 @@ USE_PLAYWRIGHT_FALLBACK=true
 
 ## 🎯 Конфигурация бизнес-правил (`config/search_config.json`)
 
-Вся предметная логика отделена от кода в [`config/search_config.json`](file:///d:/kliniki/config/search_config.json):
+Вся предметная логика отделена от системных настроек в [`config/search_config.json`](file:///d:/kliniki/config/search_config.json):
+- **`city`**: город по умолчанию для поиска.
 - **`search_queries`**: список направлений поиска («косметология», «пародонтология», «ортопедия», «гинекология»...).
 - **`stop_words_gov`**: фильтр для исключения государственных бюджетных учреждений («гбуз», «госпиталь», «поликлиника №»...).
 - **`prp_brands`**: перечень целевых брендов и пробирок (`Cortexil`, `RegenLab`, `Plasmolifting`, `Endoret`, `Medical Case`, `Ycellbio`, `T-Lab`).
 - **`regex_filter`**: шаблоны процедур (биоревитализация, ботокс, филлеры, блокады, инъекции в десны/суставы).
+- **`dedup_rules`**: слова-исключения для очистки брендов, улиц и список соцсетей.
+- **`crawler`**: шаблоны поиска ссылок (`target_link_patterns`), лимит страниц сайта и email.
+- **`harvesters`**: поисковые лимиты карт (Яндекс: `max_results_per_query`, `scroll_count`; 2GIS: `max_pages`, `page_size`).
 - **`gemini.prompt_template`**: системная инструкция эксперта-аудитора с критериями классификации.
+
 
 ---
 

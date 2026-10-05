@@ -21,9 +21,9 @@ def test_load_search_config():
 def test_get_settings():
     settings = get_settings(city="Хабаровск")
     assert settings.city == "Хабаровск"
-    assert settings.crawler.concurrency >= 1
-    assert settings.harvesters.dgis.page_size >= 1
-    assert settings.gemini.rpm >= 1
-    assert settings.pipeline.checkpoint_interval >= 1
+    assert settings.crawler_concurrency >= 1
+    assert settings.search_config.harvesters.dgis.page_size >= 1
+    assert settings.gemini_rpm >= 1
+    assert settings.checkpoint_interval >= 1
     assert settings.search_config is not None
 

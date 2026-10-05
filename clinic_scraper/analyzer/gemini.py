@@ -14,14 +14,13 @@ class GeminiAnalyzer:
 
     def __init__(self, settings: AppSettings, pool: GeminiPool):
         self.settings = settings
-        self.gemini_cfg = settings.gemini
         self.pool = pool
-        self.prompt_template = self.gemini_cfg.prompt_template
-        self.model_name = self.gemini_cfg.model
-        self.temperature = self.gemini_cfg.temperature
-        self.max_retries = self.gemini_cfg.max_retries
-        self.backoff = self.gemini_cfg.backoff_seconds
-        self.max_prompt_chars = self.gemini_cfg.max_prompt_chars
+        self.prompt_template = settings.search_config.gemini.prompt_template
+        self.model_name = settings.gemini_model
+        self.temperature = settings.gemini_temperature
+        self.max_retries = settings.gemini_max_retries
+        self.backoff = settings.gemini_backoff_seconds
+        self.max_prompt_chars = settings.gemini_max_prompt_chars
 
     async def call_gemini(self, site_text: str) -> Dict[str, Any]:
         """Отправляет текст сайта/карточки в Gemini и возвращает структурированный JSON."""

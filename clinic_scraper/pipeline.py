@@ -25,7 +25,7 @@ class Pipeline:
     def __init__(self, settings: AppSettings):
         self.settings = settings
         self.city_default = settings.search_config.city
-        self.checkpoint_interval = settings.pipeline.checkpoint_interval
+        self.checkpoint_interval = settings.checkpoint_interval
 
         self.raw_file = settings.data_dir / f"raw_clinics_{settings.city}.json"
         self.crawled_file = settings.data_dir / f"crawled_sites_{settings.city}.json"
@@ -43,8 +43,8 @@ class Pipeline:
 
         self.pool = GeminiPool(
             keys=settings.gemini_api_keys,
-            rpm=settings.gemini.rpm,
-            tpm=settings.gemini.tpm,
+            rpm=settings.gemini_rpm,
+            tpm=settings.gemini_tpm,
         )
         self.gemini_analyzer = GeminiAnalyzer(settings, self.pool)
         self.regex_filter = RegexFilter(settings.search_config)
@@ -134,7 +134,7 @@ class Pipeline:
         original_handler = signal.getsignal(signal.SIGINT)
         signal.signal(signal.SIGINT, sigint_handler)
 
-        semaphore = asyncio.Semaphore(self.settings.gemini.concurrency)
+        semaphore = asyncio.Semaphore(self.settings.gemini_concurrency)
 
         async def process_one(idx: int, item: Dict[str, Any]) -> None:
             nonlocal completed_counter
@@ -226,8 +226,8 @@ class Pipeline:
         start = time.time()
         logger.info("=" * 65)
         logger.info(f"ЗАПУСК ПАЙПЛАЙНА CLINIC_SCRAPER ({self.settings.city.upper()})")
-        logger.info(f"Пул Gemini ключей: {len(self.settings.gemini_api_keys)} шт. | Модель: {self.settings.gemini.model}")
-        logger.info(f"Конкурентность анализа: {self.settings.gemini.concurrency} потоков")
+        logger.info(f"Пул Gemini ключей: {len(self.settings.gemini_api_keys)} шт. | Модель: {self.settings.gemini_model}")
+        logger.info(f"Конкурентность анализа: {self.settings.gemini_concurrency} потоков")
         logger.info(f"Интервал сохранения чекпоинта: каждые {self.checkpoint_interval} клиник")
         logger.info("=" * 65)
 
