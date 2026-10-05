@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "kliniki-parser"
+version = "0.1.0"
+description = "Пайплайн сбора и анализа клиник (2GIS, Яндекс.Карты, SmartCrawler, Gemini)"
+authors = ["Your Name <you@example.com>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.10"
+httpx = {extras = ["http2"], version = "^0.27.0"}
+pandas = "^2.2.0"
+beautifulsoup4 = "^4.12.0"
+diskcache = "^5.6.0"
+pydantic = "^2.6.0"
+openpyxl = "^3.1.0"
+lxml = "^5.1.0"
+google-generativeai = "^0.8.0"
+python-dotenv = "^1.0.1"
+playwright = "^1.42.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
