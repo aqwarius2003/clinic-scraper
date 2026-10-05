@@ -33,3 +33,9 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Drafts & legacy scratch files
+draft_*.py
+*draft*.py
+habarovsk.py
+
