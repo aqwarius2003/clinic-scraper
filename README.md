@@ -53,7 +53,7 @@
 ```text
 kliniki/
 ├── config/
-│   └── search_config.json        # Поисковые запросы, стоп-слова, regex-правила и промпты Gemini
+│   └── search_config.json        # Творческий/предметный конфиг (запросы, стоп-слова, regex, промпт Gemini, глубина карт)
 ├── clinic_scraper/
 │   ├── __init__.py               # Экспорт версии
 │   ├── config.py                 # Pydantic Settings (.env + search_config.json)
@@ -86,7 +86,7 @@ kliniki/
 │   └── test_regex_filter.py      # Тесты детекции инъекций и PRP-брендов
 ├── run.py                        # Точка быстрого запуска
 ├── pyproject.toml                # Зависимости Poetry и настройки pytest
-├── .env.example                  # Пример конфигурации секретов
+├── .env.example                  # Системно-инфраструктурный конфиг (ключи, таймауты, квоты RPM/TPM, concurrency)
 └── .gitignore                    # Защита секретов, кэша, данных и чекпоинтов
 ```
 
@@ -104,52 +104,70 @@ poetry install
 poetry run playwright install chromium
 ```
 
-### 3. Настройка переменных окружения
-Скопируйте пример окружения:
+### 3. Настройка окружения (`.env`)
+Скопируйте пример окружения и заполните секреты:
 ```bash
 cp .env.example .env
 ```
 
-Заполните параметры в `.env`:
+В файле `.env` настраиваются **технические и системные параметры** (API-ключи, таймауты, лимиты запросов, ретраи, concurrency):
 ```ini
-# Gemini API Keys (один ключ или несколько через запятую для параллельной ротации)
-GEMINI_API_KEYS=AIzaSyA...,AIzaSyB...,AIzaSyC...
-
-# 2GIS Public API Keys (через запятую)
-PUBLIC_KEYS_2GIS=ruzhub8994,rurbbn3446,ruregt3044
-
-# Источники данных
-USE_2GIS=true
-USE_YANDEX=true
-
-# Параметры города и модели
-CITY=Хабаровск
+# Gemini API Keys (один ключ или список через запятую для параллельной ротации)
+GEMINI_API_KEYS=key1,key2,key3
 GEMINI_MODEL=gemini-3.1-flash-lite
 GEMINI_RPM=14
 GEMINI_TPM=250000
 GEMINI_CONCURRENCY=4
+GEMINI_MAX_RETRIES=3
 
-# Настройки краулера
+# 2GIS Public API Keys (через запятую)
+USE_2GIS=true
+PUBLIC_KEYS_2GIS=ruzhub8994,rurbbn3446,ruregt3044
+DGIS_PAGE_SIZE=50
+MAX_PAGES_2GIS=5
+
+# Yandex Maps
+USE_YANDEX=true
+MAX_RESULTS_YANDEX=70
+YANDEX_SCROLL_COUNT=7
+
+# SmartCrawler (сетевые параметры)
 CRAWLER_CONCURRENCY=8
 CRAWLER_TIMEOUT=15
-CRAWLER_MAX_PAGES=4
 USE_PLAYWRIGHT_FALLBACK=true
+
+# Пайплайн и пути
+CITY=Хабаровск
+CHECKPOINT_INTERVAL=15
 ```
 
 ---
 
-## 🎯 Конфигурация бизнес-правил (`config/search_config.json`)
+## 🎯 Разделение конфигурации: Творческий конфиг vs Системный .env
 
-Вся предметная логика отделена от системных настроек в [`config/search_config.json`](file:///d:/kliniki/config/search_config.json):
-- **`city`**: город по умолчанию для поиска.
+В архитектуре проекта строго соблюдено разделение зон ответственности:
+
+### 1. Творческий / Предметный конфиг ([`config/search_config.json`](file:///d:/kliniki/config/search_config.json))
+Предназначен для маркетологов, продуктовых аналитиков и операторов. Здесь **нет технических системных настроек** (нет API-ключей, токенов, таймаутов, сетевых ретраев или concurrency):
+- **`city`**: город по умолчанию для поиска (например, `"Хабаровск"`).
 - **`search_queries`**: список направлений поиска («косметология», «пародонтология», «ортопедия», «гинекология»...).
 - **`stop_words_gov`**: фильтр для исключения государственных бюджетных учреждений («гбуз», «госпиталь», «поликлиника №»...).
-- **`prp_brands`**: перечень целевых брендов и пробирок (`Cortexil`, `RegenLab`, `Plasmolifting`, `Endoret`, `Medical Case`, `Ycellbio`, `T-Lab`).
-- **`regex_filter`**: шаблоны процедур (биоревитализация, ботокс, филлеры, блокады, инъекции в десны/суставы).
-- **`dedup_rules`**: слова-исключения для очистки брендов, улиц и список соцсетей.
-- **`crawler`**: шаблоны поиска ссылок (`target_link_patterns`), лимит страниц сайта и email.
-- **`harvesters`**: поисковые лимиты карт (Яндекс: `max_results_per_query`, `scroll_count`; 2GIS: `max_pages`, `page_size`).
-- **`gemini.prompt_template`**: системная инструкция эксперта-аудитора с критериями классификации.
+- **`prp_brands`**: словарь целевых брендов и синонимов (`Cortexil`, `RegenLab`, `Plasmolifting`, `Endoret`, `Medical Case`, `Ycellbio`, `T-Lab`).
+- **`regex_filter`**: шаблоны процедур для мгновенной валидации (биоревитализация, ботокс, филлеры, блокады, инъекции в десны/суставы).
+- **`dedup_rules`**: слова-исключения для очистки брендов, улиц и список соцсетей/агрегаторов.
+- **`crawler`**: шаблоны поиска ссылок (`target_link_patterns`), лимит страниц на сайт (`max_pages_per_site`), лимит символов текста (`max_text_chars`) и email (`max_emails`).
+- **`harvesters`**: глубина сбора карт:
+  - `dgis`: `page_size`, `max_pages`.
+  - `yandex`: `max_results_per_query`, `scroll_count`.
+- **`gemini.prompt_template`**: системный промпт LLM-эксперта с подробными правилами классификации инъекционной терапии и плазмотерапии.
+
+### 2. Технический / Инфраструктурный конфиг ([`.env`](file:///d:/kliniki/.env.example))
+Предназначен для системных инженеров и devops. Управляет сетевыми клиентами, пулом потоков, rate limits и секретами:
+- Ключи доступа к Gemini и публичные ключи 2GIS.
+- Конкурентность и квоты (`GEMINI_RPM`, `GEMINI_TPM`, `GEMINI_CONCURRENCY`).
+- Сетевые таймауты, паузы между запросами и бэкофф (`GEMINI_BACKOFF_SECONDS`, `DGIS_REQUEST_DELAY`, `CRAWLER_TIMEOUT`).
+- Настройки браузерного движка Playwright (`PLAYWRIGHT_TIMEOUT_MS`, `PLAYWRIGHT_WAIT_MS`).
+- Пути к файлам данных и кэшу (`DATA_DIR`, `OUTPUT_DIR`, `CACHE_DIR`).
 
 
 ---
