@@ -14,6 +14,9 @@ ENV/
 .env.local
 .env.*.local
 
+# Logs
+*.log
+
 # Project data, checkpoints and cache
 cache/
 data/
@@ -33,6 +36,8 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # Drafts & legacy scratch files
 draft_*.py
