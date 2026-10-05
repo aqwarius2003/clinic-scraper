@@ -2,7 +2,8 @@
 name = "clinic-scraper"
 version = "0.1.0"
 description = "ClinicScraper: Модульный асинхронный сервис сбора, краулинга и скоринга клиник (2GIS, Яндекс, Gemini)"
-authors = ["ClinicScraper Team"]
+authors = ["aqwarius2003"]
+license = "MIT"
 package-mode = false
 
 [tool.poetry.dependencies]
